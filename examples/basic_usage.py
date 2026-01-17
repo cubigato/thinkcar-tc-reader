@@ -14,7 +14,7 @@ from thinkcar_tc_reader import export_to_csv, parse_tc_file
 
 def main():
     # Path to TC file
-    tc_file = "SUBARU_9T8P20524415_20260117154318.TC"
+    tc_file = "../testdata/SUBARU_9T8P20524415_20260117154318.TC"
 
     print("=" * 70)
     print("ThinkCar TC Reader - Basic Usage Example")

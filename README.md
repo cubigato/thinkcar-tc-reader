@@ -6,7 +6,7 @@ A Python library and command-line tool for reading and converting ThinkCar `.TC`
 
 ThinkCar diagnostic devices (ThinkDiag, ThinkScan, ThinkTool) and reseller apps (Kingbolen eDiag, Topdon) record OBD-II live data in a proprietary binary format with the `.TC` extension. This library provides tools to parse these files and export the data to CSV for analysis.
 
-The TC file format has been reverse-engineered and documented in [`TC-FILE-FORMAT.md`](TC-FILE-FORMAT.md).
+The TC file format has been reverse-engineered and documented in [`docs/TC-FILE-FORMAT.md`](docs/TC-FILE-FORMAT.md).
 
 ## Features
 
@@ -83,7 +83,7 @@ tc2csv recording.TC --no-metadata
 from thinkcar_tc_reader import parse_tc_file
 
 # Parse the file
-data = parse_tc_file("SUBARU_9T8P20524415_20260117154318.TC")
+data = parse_tc_file("testdata/SUBARU_9T8P20524415_20260117154318.TC")
 
 # Access metadata
 print(f"Manufacturer: {data.metadata.manufacturer}")
@@ -137,7 +137,7 @@ The ThinkCar `.TC` format is a binary format with the following characteristics:
 - **32 parameters per record**: Fixed record size of 128 bytes (32 × uint32)
 - **Little-endian encoding**: All multi-byte integers are little-endian
 
-For complete format specification, see [`TC-FILE-FORMAT.md`](TC-FILE-FORMAT.md).
+For complete format specification, see [`docs/TC-FILE-FORMAT.md`](docs/TC-FILE-FORMAT.md).
 
 ## Testing
 
@@ -166,10 +166,20 @@ thinkcar-tc-reader/
 ├── tests/
 │   ├── test_parser.py        # Parser tests
 │   └── test_exporter.py      # Exporter tests
+├── examples/
+│   ├── basic_usage.py        # API usage example
+│   └── parse_tc_example.py   # Reference parser implementation
+├── docs/
+│   ├── TC-FILE-FORMAT.md     # File format specification
+│   ├── IMPLEMENTATION.md     # Implementation summary
+│   ├── AGENTS.md             # Development guidelines
+│   └── archive/
+│       └── tc-file-info.md   # Historical research notes
+├── testdata/
+│   ├── SUBARU_*.TC           # Sample TC file
+│   └── SUBARU_*.csv          # Sample CSV output
 ├── pyproject.toml            # Project configuration
-├── README.md                 # This file
-├── AGENTS.md                 # Development guidelines
-└── TC-FILE-FORMAT.md         # File format specification
+└── README.md                 # This file
 ```
 
 ## Known Limitations
@@ -181,9 +191,9 @@ thinkcar-tc-reader/
 
 ## Example Data
 
-The repository includes a sample file from a Subaru Outback BR (2014) TCM recording:
+The repository includes a sample file from a Subaru Outback BR (2014) TCM recording in the `testdata/` directory:
 
-- File: `SUBARU_9T8P20524415_20260117154318.TC`
+- File: `testdata/SUBARU_9T8P20524415_20260117154318.TC`
 - Duration: ~15 minutes of driving data
 - Records: 203 data points
 - Parameters: 32 (Engine Speed, ATF Temp, Vehicle Speed, Gear Ratio, etc.)
@@ -203,6 +213,7 @@ MIT License - see LICENSE file for details
 
 ## Related Files
 
-- [`TC-FILE-FORMAT.md`](TC-FILE-FORMAT.md) - Complete file format specification
-- [`AGENTS.md`](AGENTS.md) - Development guidelines and architecture notes
-- [`example_parse_tc.py`](example_parse_tc.py) - Reference implementation (working parser)
+- [`docs/TC-FILE-FORMAT.md`](docs/TC-FILE-FORMAT.md) - Complete file format specification
+- [`docs/AGENTS.md`](docs/AGENTS.md) - Development guidelines and architecture notes
+- [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) - Implementation summary
+- [`examples/parse_tc_example.py`](examples/parse_tc_example.py) - Reference implementation (working parser)

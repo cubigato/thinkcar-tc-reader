@@ -4,7 +4,7 @@ This document summarizes the implementation of the ThinkCar TC Reader library an
 
 ## Overview
 
-The ThinkCar TC Reader is a complete Python package for reading and converting ThinkCar `.TC` diagnostic log files to CSV format. The implementation follows the specifications in `TC-FILE-FORMAT.md` and adheres to the architecture defined in `AGENTS.md`.
+The ThinkCar TC Reader is a complete Python package for reading and converting ThinkCar `.TC` diagnostic log files to CSV format. The implementation follows the specifications in `docs/TC-FILE-FORMAT.md` and adheres to the architecture defined in `docs/AGENTS.md`.
 
 ## Implementation Date
 
@@ -23,11 +23,19 @@ thinkcar-tc-reader/
 │   ├── test_parser.py          # Parser tests (234 lines)
 │   └── test_exporter.py        # Exporter tests (280 lines)
 ├── examples/                   # Usage examples
-│   └── basic_usage.py          # Complete usage example (128 lines)
+│   ├── basic_usage.py          # Complete usage example (128 lines)
+│   └── parse_tc_example.py     # Reference parser implementation
+├── docs/                       # Documentation
+│   ├── TC-FILE-FORMAT.md       # Format specification
+│   ├── IMPLEMENTATION.md       # This file
+│   ├── AGENTS.md               # Development guidelines
+│   └── archive/
+│       └── tc-file-info.md     # Historical research notes
+├── testdata/                   # Sample test data
+│   ├── SUBARU_*.TC             # Sample TC file
+│   └── SUBARU_*.csv            # Sample CSV output
 ├── pyproject.toml              # Project configuration
 ├── README.md                   # User documentation
-├── AGENTS.md                   # Development guidelines
-├── TC-FILE-FORMAT.md           # Format specification
 └── LICENSE                     # MIT License
 ```
 
@@ -212,7 +220,7 @@ Clean, simple API with minimal required arguments.
 ### Real-World Testing
 
 The implementation has been validated against a real TC file:
-- **File:** `SUBARU_9T8P20524415_20260117154318.TC`
+- **File:** `testdata/SUBARU_9T8P20524415_20260117154318.TC`
 - **Source:** Subaru Outback BR (2014) TCM recording
 - **Records:** 203 data points over ~15 minutes
 - **Parameters:** 32 (speed, temperature, voltage, gear ratios, etc.)
@@ -220,7 +228,7 @@ The implementation has been validated against a real TC file:
 **Validation Results:**
 - All data parsed correctly
 - Values are plausible (speeds 0-95 km/h, temps 9-27°C)
-- CSV output matches reference CSV from `example_parse_tc.py`
+- CSV output matches reference CSV from `examples/parse_tc_example.py`
 - Metadata extracted correctly
 
 ### Test Coverage
@@ -301,12 +309,12 @@ Potential improvements (not implemented):
 
 ## Compliance
 
-✓ Follows `AGENTS.md` architecture guidelines
+✓ Follows `docs/AGENTS.md` architecture guidelines
 ✓ Uses uv with Python venv
 ✓ Packaging with pyproject.toml
 ✓ pytest for testing (not overused)
-✓ Based on `TC-FILE-FORMAT.md` specification
-✓ Uses `example_parse_tc.py` as reference
+✓ Based on `docs/TC-FILE-FORMAT.md` specification
+✓ Uses `examples/parse_tc_example.py` as reference
 
 ## License
 

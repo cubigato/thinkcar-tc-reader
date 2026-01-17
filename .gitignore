@@ -146,5 +146,8 @@ cython_debug/
 # Project specific
 *.TC
 *.csv
-!SUBARU_9T8P20524415_20260117154318.TC
-!SUBARU_9T8P20524415_20260117154318.csv
+# Allow testdata files
+!testdata/*.TC
+!testdata/*.csv
+# Ignore example outputs
+examples/example_output*.csv

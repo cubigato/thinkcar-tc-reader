@@ -5,9 +5,12 @@ Example parser for ThinkCar .TC files.
 This script demonstrates how to parse and extract data from ThinkCar diagnostic
 log files (.TC format). Based on reverse engineering of the LSX9 file format.
 
+This is a reference implementation showing the low-level parsing approach.
+For production use, prefer the thinkcar_tc_reader library instead.
+
 Usage:
-    python example_parse_tc.py <filename.TC>
-    python example_parse_tc.py SUBARU_9T8P20524415_20260117154318.TC
+    python parse_tc_example.py <filename.TC>
+    python parse_tc_example.py ../testdata/SUBARU_9T8P20524415_20260117154318.TC
 """
 
 import struct

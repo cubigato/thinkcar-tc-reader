@@ -11,7 +11,7 @@ Always read the README.md file before editing this repo.
 # TC FILE FORMAT
 
 The ThinkCar .TC file format has been **reverse-engineered** and documented in:
-→ **`TC-FILE-FORMAT.md`** ← PRIMARY SPECIFICATION
+→ **`docs/TC-FILE-FORMAT.md`** ← PRIMARY SPECIFICATION
 
 This is the source for the file format. It includes:
 - Complete binary structure (headers, data blocks, string table)
@@ -23,7 +23,7 @@ This is the source for the file format. It includes:
 The spec might still contain errors or omissions as it is a reverse-engineered format.
 
 A working reference implementation is provided:
-→ **`example_parse_tc.py`** ← WORKING PARSER
+→ **`examples/parse_tc_example.py`** ← WORKING PARSER
 
 Key format characteristics:
 - Binary format with string table architecture
@@ -39,5 +39,5 @@ The format has been validated with real driving data showing:
 - Correct gear selector states (P/R/N/D transitions)
 - CVT operation patterns matching expected behavior
 
-Historical note: `tc-file-info.md` contains early research notes (mostly speculation). 
-**It has been superseded by TC-FILE-FORMAT.md and can be ignored.**
+Historical note: `docs/archive/tc-file-info.md` contains early research notes (mostly speculation). 
+**It has been superseded by docs/TC-FILE-FORMAT.md and can be ignored.**
