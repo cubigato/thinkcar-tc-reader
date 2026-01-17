@@ -36,7 +36,7 @@ thinkcar-tc-reader/
 │   └── SUBARU_*.csv            # Sample CSV output
 ├── pyproject.toml              # Project configuration
 ├── README.md                   # User documentation
-└── LICENSE                     # MIT License
+└── LICENSE                     # Apache License 2.0
 ```
 
 **Total Code:** ~1,423 lines of Python
@@ -318,7 +318,7 @@ Potential improvements (not implemented):
 
 ## License
 
-MIT License - See LICENSE file
+Apache License 2.0 - See LICENSE file
 
 ## Conclusion
 
