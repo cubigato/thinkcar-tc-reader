@@ -24,7 +24,7 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-PIPFILE.lock
+MANIFEST
 
 # PyInstaller
 *.manifest
@@ -91,8 +91,6 @@ poetry.lock
 
 # pdm
 .pdm.toml
-.pdm-python
-.pdm-build/
 
 # PEP 582
 __pypackages__/
@@ -146,8 +144,7 @@ cython_debug/
 .DS_Store
 
 # Project specific
-*.db
-*.sqlite
-
-# ThinkCar TC
 *.TC
+*.csv
+!SUBARU_9T8P20524415_20260117154318.TC
+!SUBARU_9T8P20524415_20260117154318.csv
