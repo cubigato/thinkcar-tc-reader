@@ -131,10 +131,11 @@ print(f"Temp range: {min(temps)} - {max(temps)}")
 
 The ThinkCar `.TC` format is a binary format with the following characteristics:
 
-- **Magic signature**: `LSX9`
+- **Magic signatures**: `LSX8` and `LSX9`
 - **String table architecture**: All values stored as string references
 - **1-based indexing**: String indices start at 1 (not 0)
-- **32 parameters per record**: Fixed record size of 128 bytes (32 × uint32)
+- **Variable record width**: The descriptor defines the data-block offset and
+  record size (observed: 12 or 32 parameters)
 - **Little-endian encoding**: All multi-byte integers are little-endian
 
 For complete format specification, see [`docs/TC-FILE-FORMAT.md`](docs/TC-FILE-FORMAT.md).

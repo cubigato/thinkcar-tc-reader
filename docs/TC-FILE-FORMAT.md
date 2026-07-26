@@ -4,7 +4,9 @@
 
 The `.TC` file format is a proprietary binary format used by ThinkCar diagnostic devices (ThinkDiag, ThinkScan, ThinkTool) and reseller apps (Kingbolen eDiag, Topdon) to store OBD-II live data recordings.
 
-This document is based on reverse engineering of a sample file from a **Subaru Outback BR (2014)** TCM recording.
+This document is based on reverse engineering of recordings from a **Subaru
+Outback BR (2014)** and a **Topdon Phoenix Lite 2 / Toyota**. Offsets and record
+widths shown below are examples; readers must follow the descriptor pointers.
 
 ---
 
@@ -14,11 +16,10 @@ This document is based on reverse engineering of a sample file from a **Subaru O
 |--------|------|-------------|
 | 0x0000 | 256 | File Header |
 | 0x0100 | 40 | Record Metadata Header |
-| 0x0128 | 16 | Data Section Descriptor |
-| 0x0138 | 128 | Parameter Definition Table (32 × 4 bytes) |
-| 0x01B8 | 384 | Reserved / Padding (mostly zeros) |
-| 0x0338 | 16 | Data Block Header |
-| 0x0348 | variable | Data Records (N × 128 bytes) |
+| variable | 16 | Data Section Descriptor (offset referenced at 0x0118) |
+| descriptor + 16 | variable | Parameter Definition Table |
+| descriptor field | 16 | Data Block Header |
+| data block + 16 | variable | Data Records |
 | variable | 16 | String Table Header |
 | variable | variable | String Table Entries |
 
@@ -30,7 +31,7 @@ This document is based on reverse engineering of a sample file from a **Subaru O
 ```
 Offset  Size  Description
 ------  ----  -----------
-0x0000  4     Magic: "LSX9" (0x4C 0x53 0x58 0x39)
+0x0000  4     Magic: "LSX8" or "LSX9"
 ```
 
 ### Header Fields
@@ -65,7 +66,7 @@ Offset  Size  Type      Description
 0x0110  4     uint32    Unknown
 0x0114  4     uint32    Unknown
 0x0118  4     uint32    Offset to data descriptor (0x0128)
-0x011C  4     uint32    Offset to data block (0x0338)
+0x011C  4     uint32    Offset to data block (e.g. 0x0338 or 0x01F8)
 0x0120  8     ...       Reserved (zeros)
 ```
 
@@ -85,9 +86,9 @@ Offset  Size  Type      Description
 
 ---
 
-## 4. Parameter Definition Table (0x0138 - 0x01B7)
+## 4. Parameter Definition Table (immediately after descriptor)
 
-32 entries, each 4 bytes:
+One entry per 4-byte value in a record (record size / 4), each 4 bytes:
 
 ```
 Offset  Size  Type      Description
@@ -106,7 +107,7 @@ Offset  Size  Type      Description
 
 ---
 
-## 5. Data Block Header (0x0338 - 0x0347)
+## 5. Data Block Header (variable offset)
 
 ```
 Offset  Size  Type      Description
@@ -123,9 +124,10 @@ Offset  Size  Type      Description
 
 ---
 
-## 6. Data Records (0x0348 - String Table)
+## 6. Data Records (immediately after data block header)
 
-Each data record is **128 bytes** containing **32 × uint32** values.
+Each data record contains `record size / 4` × `uint32` values. Observed record
+sizes include 128 bytes (32 values) and 48 bytes (12 values).
 
 Each value is a **string index** into the String Table, pointing to the actual measurement value as a string.
 
@@ -301,7 +303,7 @@ All multi-byte integers are **Little-Endian**.
 ```python
 def parse_tc_file(data):
     # 1. Verify magic
-    assert data[0:4] == b'LSX9'
+    assert data[0:4] in (b'LSX8', b'LSX9')
     
     # 2. Get string table offset
     string_table_offset = read_uint32(data, 0x0C)
@@ -310,16 +312,20 @@ def parse_tc_file(data):
     strings = ['']  # Placeholder at index 0
     strings.extend(parse_string_table(data, string_table_offset + 16))
     
-    # 4. Get data section info
-    data_offset = 0x348  # Fixed offset after data block header
-    record_size = read_uint32(data, 0x134)  # 128 bytes
-    data_size = read_uint32(data, 0x340)    # From data block header
+    # 4. Follow the data descriptor and block pointers
+    descriptor_offset = read_uint32(data, 0x118)
+    data_block_offset = read_uint32(data, descriptor_offset + 4)
+    data_offset = data_block_offset + 16
+    record_size = read_uint32(data, data_block_offset + 12)
+    data_size = read_uint32(data, data_block_offset + 8)
     record_count = data_size // record_size
     
-    # 5. Parse parameter definitions from table at 0x138
+    # 5. Parse one parameter definition per uint32 record value
     params = []
-    for i in range(32):
-        name_idx = read_uint16(data, 0x138 + i*4)
+    parameter_count = record_size // 4
+    parameter_table_offset = descriptor_offset + 16
+    for i in range(parameter_count):
+        name_idx = read_uint16(data, parameter_table_offset + i*4)
         params.append(strings[name_idx])  # Direct index (1-based)
     
     # 6. Parse data records
@@ -327,7 +333,7 @@ def parse_tc_file(data):
     for r in range(record_count):
         offset = data_offset + r * record_size
         values = []
-        for c in range(32):
+        for c in range(parameter_count):
             idx = read_uint32(data, offset + c*4)
             values.append(strings[idx])  # Direct index (1-based)
         records.append(values)

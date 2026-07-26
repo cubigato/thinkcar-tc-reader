@@ -5,10 +5,10 @@ This module implements the parser for ThinkCar diagnostic log files (.TC format)
 based on the reverse-engineered file format specification.
 
 The TC format uses:
-- Binary structure with LSX9 magic signature
+- Binary structure with LSX8 or LSX9 magic signature
 - String table architecture for storing all values
 - 1-based string indexing
-- 32 parameters per record × 128 bytes per record
+- A device-dependent number of parameters per record
 """
 
 import struct
@@ -123,7 +123,7 @@ def parse_tc_file(filepath: str | Path) -> TCData:
     Parse a ThinkCar .TC file and return structured data.
 
     The parser follows the TC-FILE-FORMAT.md specification:
-    - Verifies LSX9 magic signature
+    - Verifies LSX8/LSX9 magic signature
     - Parses string table (1-based indexing)
     - Extracts parameter definitions
     - Parses data records
@@ -156,8 +156,8 @@ def parse_tc_file(filepath: str | Path) -> TCData:
     except UnicodeDecodeError:
         raise TCParseError("Invalid magic bytes (not ASCII)")
 
-    if magic != "LSX9":
-        raise TCParseError(f"Invalid magic: {magic!r}, expected 'LSX9'")
+    if magic not in {"LSX8", "LSX9"}:
+        raise TCParseError(f"Invalid magic: {magic!r}, expected 'LSX8' or 'LSX9'")
 
     # 2. Get string table offset from file header at 0x0C
     try:
@@ -188,15 +188,76 @@ def parse_tc_file(filepath: str | Path) -> TCData:
         session_id=strings[8] if len(strings) > 8 else "",
     )
 
-    # 5. Get parameter definitions from table at 0x138 (32 entries × 4 bytes)
+    # 5. Locate the data descriptor. The metadata header points to it at 0x118;
+    # older documentation happened to observe it at 0x128 in every sample.
+    try:
+        data_descriptor_offset = _read_uint32(data, 0x118)
+    except TCParseError as e:
+        raise TCParseError(f"Cannot read data descriptor offset: {e}")
+
+    if data_descriptor_offset == 0:
+        # Some early/synthetic files omit the pointer, but still place the
+        # descriptor at the format's conventional location.
+        data_descriptor_offset = 0x128
+
+    if data_descriptor_offset + 16 > len(data):
+        raise TCParseError(
+            f"Data descriptor offset {data_descriptor_offset:#x} beyond file size"
+        )
+
+    try:
+        data_block_offset = _read_uint32(data, data_descriptor_offset + 4)
+        descriptor_record_size = _read_uint32(data, data_descriptor_offset + 12)
+    except TCParseError as e:
+        raise TCParseError(f"Cannot read data descriptor: {e}")
+
+    if data_block_offset + 16 > len(data):
+        raise TCParseError(
+            f"Data block offset {data_block_offset:#x} beyond file size"
+        )
+
+    # The authoritative record size is repeated in the data block header.
+    try:
+        data_size = _read_uint32(data, data_block_offset + 8)
+        record_size = _read_uint32(data, data_block_offset + 12)
+    except TCParseError as e:
+        raise TCParseError(f"Cannot read data block header: {e}")
+
+    if record_size == 0:
+        raise TCParseError("Invalid record size: 0")
+    if record_size % 4 != 0:
+        raise TCParseError(
+            f"Invalid record size: {record_size} (must be divisible by 4)"
+        )
+    if descriptor_record_size not in {0, record_size}:
+        raise TCParseError(
+            "Record size mismatch between data descriptor "
+            f"({descriptor_record_size}) and data block ({record_size})"
+        )
+    if data_size % record_size != 0:
+        raise TCParseError(
+            f"Data size {data_size} is not a multiple of record size {record_size}"
+        )
+
+    parameter_count = record_size // 4
+    parameter_table_offset = data_descriptor_offset + 16
+
+    if parameter_table_offset + parameter_count * 4 > data_block_offset:
+        raise TCParseError(
+            "Parameter definition table overlaps the data block "
+            f"({parameter_count} entries)"
+        )
+
+    # 6. Get one parameter definition for every uint32 value in a record.
     param_indices = []
-    for i in range(32):
+    for i in range(parameter_count):
         try:
-            idx = _read_uint16(data, 0x138 + i * 4)
+            idx = _read_uint16(data, parameter_table_offset + i * 4)
             param_indices.append(idx)
         except TCParseError:
             raise TCParseError(
-                f"Cannot read parameter index {i} at offset {0x138 + i * 4:#x}"
+                "Cannot read parameter index "
+                f"{i} at offset {parameter_table_offset + i * 4:#x}"
             )
 
     # Build parameter names list
@@ -208,20 +269,8 @@ def parse_tc_file(filepath: str | Path) -> TCData:
             # Invalid index - use placeholder
             parameters.append(f"<index_{idx}>")
 
-    # 6. Extract units (string indices 40-46 based on specification)
-    units = strings[40:47] if len(strings) > 46 else []
-
-    # 7. Get data section info from data block header at 0x338
-    try:
-        data_offset = 0x348  # Fixed offset after 16-byte data block header
-        record_size = _read_uint32(data, 0x344)  # Usually 128
-        data_size = _read_uint32(data, 0x340)
-    except TCParseError as e:
-        raise TCParseError(f"Cannot read data block header: {e}")
-
-    if record_size == 0:
-        raise TCParseError("Invalid record size: 0")
-
+    # 7. Validate and locate the records immediately after the block header.
+    data_offset = data_block_offset + 16
     record_count = data_size // record_size
 
     # Sanity check
@@ -233,20 +282,18 @@ def parse_tc_file(filepath: str | Path) -> TCData:
             f"Data section ({data_offset:#x} + {data_size:#x}) exceeds file size"
         )
 
-    # 8. Parse data records
-    # Each record contains 32 uint32 values (string indices)
+    # 8. Parse data records. Each uint32 is a string-table index.
     records = []
+    value_indices: list[int] = []
 
     for rec_num in range(record_count):
         offset = data_offset + rec_num * record_size
 
-        if offset + 128 > len(data):
-            # Partial record at end of file - stop parsing
-            break
-
-        # Read 32 uint32 values (128 bytes total)
         try:
-            values = struct.unpack("<" + "I" * 32, data[offset : offset + 128])
+            values = struct.unpack(
+                "<" + "I" * parameter_count,
+                data[offset : offset + record_size],
+            )
         except struct.error as e:
             raise TCParseError(f"Failed to unpack record {rec_num}: {e}")
 
@@ -254,6 +301,7 @@ def parse_tc_file(filepath: str | Path) -> TCData:
         record = {}
         for i, param_name in enumerate(parameters):
             value_idx = values[i]
+            value_indices.append(value_idx)
 
             # Look up string value (indices are 1-based)
             if value_idx < len(strings):
@@ -265,6 +313,15 @@ def parse_tc_file(filepath: str | Path) -> TCData:
             record[param_name] = value
 
         records.append(record)
+
+    # Unit strings sit between the parameter names and the first measurement
+    # value. Their absolute indices vary with the number of parameters.
+    first_unit_index = max(param_indices, default=0) + 1
+    first_value_index = min(
+        (idx for idx in value_indices if idx > 0),
+        default=first_unit_index,
+    )
+    units = strings[first_unit_index:first_value_index]
 
     return TCData(
         magic=magic,

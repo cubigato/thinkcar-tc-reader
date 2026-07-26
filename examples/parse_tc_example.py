@@ -3,7 +3,7 @@
 Example parser for ThinkCar .TC files.
 
 This script demonstrates how to parse and extract data from ThinkCar diagnostic
-log files (.TC format). Based on reverse engineering of the LSX9 file format.
+log files (.TC format). Based on reverse engineering of the LSX8/LSX9 file format.
 
 This is a reference implementation showing the low-level parsing approach.
 For production use, prefer the thinkcar_tc_reader library instead.
@@ -80,8 +80,8 @@ def parse_tc_file(filepath: str) -> dict:
 
     # Verify magic
     magic = data[0:4].decode("ascii")
-    if magic != "LSX9":
-        raise ValueError(f"Invalid magic: {magic}, expected LSX9")
+    if magic not in {"LSX8", "LSX9"}:
+        raise ValueError(f"Invalid magic: {magic}, expected LSX8 or LSX9")
 
     # Get string table offset from header
     string_table_offset = read_uint32(data, 0x0C)
@@ -101,10 +101,20 @@ def parse_tc_file(filepath: str) -> dict:
         "session_id": strings[8] if len(strings) > 8 else "",
     }
 
-    # Get parameter definitions from table at 0x138 (32 entries x 4 bytes)
+    # Follow the data descriptor and data block pointers.
+    data_descriptor_offset = read_uint32(data, 0x118) or 0x128
+    data_block_offset = read_uint32(data, data_descriptor_offset + 4)
+    data_offset = data_block_offset + 16
+    record_size = read_uint32(data, data_block_offset + 12)
+    data_size = read_uint32(data, data_block_offset + 8)
+    record_count = data_size // record_size
+    parameter_count = record_size // 4
+
+    # Get one parameter definition for each uint32 in a record.
+    parameter_table_offset = data_descriptor_offset + 16
     param_indices = []
-    for i in range(32):
-        idx = read_uint16(data, 0x138 + i * 4)
+    for i in range(parameter_count):
+        idx = read_uint16(data, parameter_table_offset + i * 4)
         param_indices.append(idx)
 
     # Build parameter names list
@@ -112,29 +122,32 @@ def parse_tc_file(filepath: str) -> dict:
         strings[idx] if idx < len(strings) else f"<{idx}>" for idx in param_indices
     ]
 
-    # Extract units (indices 40-46)
-    units = strings[40:47] if len(strings) > 46 else []
-
-    # Get data section info from data block header at 0x338
-    data_offset = 0x348  # Fixed offset after 16-byte data block header
-    record_size = read_uint32(data, 0x344)  # Usually 128
-    data_size = read_uint32(data, 0x340)
-    record_count = data_size // record_size
-
     # Parse data records
     records = []
+    value_indices = []
     for rec_num in range(record_count):
         offset = data_offset + rec_num * record_size
-        values = struct.unpack("<" + "I" * 32, data[offset : offset + 128])
+        values = struct.unpack(
+            "<" + "I" * parameter_count,
+            data[offset : offset + record_size],
+        )
 
         # Map values to parameter names
         record = {}
         for i, param_name in enumerate(parameters):
             value_idx = values[i]
+            value_indices.append(value_idx)
             value = strings[value_idx] if value_idx < len(strings) else f"<{value_idx}>"
             record[param_name] = value
 
         records.append(record)
+
+    first_unit_index = max(param_indices, default=0) + 1
+    first_value_index = min(
+        (idx for idx in value_indices if idx > 0),
+        default=first_unit_index,
+    )
+    units = strings[first_unit_index:first_value_index]
 
     return {
         "magic": magic,
@@ -216,8 +229,7 @@ def main():
     print(f"\nSample Data (first 5 records):")
     print("-" * 60)
 
-    # Show a few key parameters
-    # Note: "Front Wheel Speed" appears twice - column 13 has actual speed in km/h
+    # Show a few commonly encountered parameters when present.
     key_params = [
         "Engine Speed",
         "ATF Temp.",
@@ -230,8 +242,6 @@ def main():
         for param in key_params:
             if param in record:
                 print(f"  {param:25s}: {record[param]}")
-        # Column 13 is the actual vehicle speed (first "Front Wheel Speed")
-        print(f"  {'Vehicle Speed (col 13)':25s}: {list(record.values())[13]}")
         print()
 
     # Optional: Export to CSV

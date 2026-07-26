@@ -66,10 +66,10 @@ The core parsing engine that reads binary TC files according to the specificatio
 - `_read_uint16()`, `_read_uint32()`: Binary reading helpers
 
 **Implementation Details:**
-- Verifies LSX9 magic signature
+- Verifies LSX8 or LSX9 magic signature
 - Reads string table offset from header (0x0C)
-- Parses parameter definitions from table at 0x138
-- Handles 32 parameters × 128-byte records
+- Follows the data descriptor and data block offsets
+- Derives the parameter count from the variable record size
 - All string indices are 1-based (adds placeholder at index 0)
 
 ### 2. Exporter Module (`exporter.py`)

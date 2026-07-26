@@ -88,6 +88,11 @@ class TestTCFileParser:
         # String table offset at 0x0C (pointing to offset 0x1000)
         struct.pack_into("<I", data, 0x0C, 0x1000)
 
+        # Data descriptor and data block pointers
+        struct.pack_into("<I", data, 0x118, 0x128)
+        struct.pack_into("<I", data, 0x12C, 0x338)
+        struct.pack_into("<I", data, 0x134, 128)
+
         # Data block header at 0x338
         struct.pack_into("<I", data, 0x340, 128)  # Data size
         struct.pack_into("<I", data, 0x344, 128)  # Record size
@@ -154,6 +159,28 @@ class TestTCFileParser:
         assert len(result.parameters) == 32
         assert result.record_count == 1
         assert len(result.records) == 1
+
+    def test_parse_lsx8_with_dynamic_data_block_and_record_size(self, tmp_path):
+        """LSX8 files may use fewer columns and an earlier data block."""
+        data = bytearray(self.create_minimal_tc_file())
+        data[0:4] = b"LSX8"
+
+        # Move the block from 0x338 to 0x1F8 and use 12 columns (48 bytes).
+        struct.pack_into("<I", data, 0x12C, 0x1F8)
+        struct.pack_into("<I", data, 0x134, 48)
+        struct.pack_into("<IIII", data, 0x1F8, 0x00040010, 0, 48, 48)
+        for i in range(12):
+            struct.pack_into("<I", data, 0x208 + i * 4, 41 + (i % 4))
+
+        tc_file = tmp_path / "lsx8.TC"
+        tc_file.write_bytes(data)
+        result = parse_tc_file(tc_file)
+
+        assert result.magic == "LSX8"
+        assert len(result.parameters) == 12
+        assert result.record_count == 1
+        assert result.records[0]["Param0"] == "0.00"
+        assert result.records[0]["Param11"] == "OFF"
 
     def test_parse_nonexistent_file(self):
         """Test error when file doesn't exist."""

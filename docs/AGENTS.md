@@ -15,7 +15,7 @@ The ThinkCar .TC file format has been **reverse-engineered** and documented in:
 
 This is the source for the file format. It includes:
 - Complete binary structure (headers, data blocks, string table)
-- Magic signature: `LSX9`
+- Magic signatures: `LSX8` and `LSX9`
 - All offsets, data types, and field meanings
 - Parsing algorithm with pseudocode
 - Verified against real-world Subaru Outback BR TCM recording data
@@ -29,9 +29,11 @@ Key format characteristics:
 - Binary format with string table architecture
 - All measured values stored as string references (not raw numbers)
 - String indices are 1-based (index 0 is placeholder)
-- 32 parameters per record × 128 bytes per record
-- Parameters defined in table at offset 0x138
-- Data records start at offset 0x348
+- Variable parameter count and record size (observed: 12 × 48 and 32 × 128 bytes)
+- Data descriptor offset stored at 0x118
+- Data block offset stored in the descriptor at +0x04
+- Parameters follow the 16-byte descriptor
+- Data records follow the 16-byte data block header
 - String table at variable offset (specified in header at 0x0C)
 
 The format has been validated with real driving data showing:

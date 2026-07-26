@@ -151,3 +151,5 @@ cython_debug/
 !testdata/*.csv
 # Ignore example outputs
 examples/example_output*.csv
+
+tmp/

@@ -23,7 +23,7 @@ This example uses the sample file from `../testdata/SUBARU_9T8P20524415_20260117
 
 **Output:**
 - Displays metadata (timestamp, manufacturer, device info)
-- Shows all 32 parameters
+- Shows all parameters present in the recording
 - Prints sample data from first 5 records
 - Analyzes speed and temperature ranges
 - Exports to CSV files (with and without metadata)
