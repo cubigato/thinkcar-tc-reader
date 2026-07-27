@@ -29,7 +29,7 @@ Key format characteristics:
 - Binary format with string table architecture
 - All measured values stored as string references (not raw numbers)
 - String indices are 1-based (index 0 is placeholder)
-- Variable parameter count and record size (observed: 12 × 48 and 32 × 128 bytes)
+- Variable parameter count and record size (observed: 2, 3, 12, and 32 values)
 - Data descriptor offset stored at 0x118
 - Data block offset stored in the descriptor at +0x04
 - Parameters follow the 16-byte descriptor

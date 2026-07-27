@@ -160,27 +160,50 @@ class TestTCFileParser:
         assert result.record_count == 1
         assert len(result.records) == 1
 
-    def test_parse_lsx8_with_dynamic_data_block_and_record_size(self, tmp_path):
-        """LSX8 files may use fewer columns and an earlier data block."""
+    @pytest.mark.parametrize(
+        ("parameter_count", "data_block_offset"),
+        [(2, 0x158), (3, 0x168), (12, 0x1F8)],
+    )
+    def test_parse_lsx8_with_dynamic_data_block_and_record_size(
+        self, tmp_path, parameter_count, data_block_offset
+    ):
+        """LSX8 files use varying column counts and data block offsets."""
         data = bytearray(self.create_minimal_tc_file())
         data[0:4] = b"LSX8"
 
-        # Move the block from 0x338 to 0x1F8 and use 12 columns (48 bytes).
-        struct.pack_into("<I", data, 0x12C, 0x1F8)
-        struct.pack_into("<I", data, 0x134, 48)
-        struct.pack_into("<IIII", data, 0x1F8, 0x00040010, 0, 48, 48)
-        for i in range(12):
-            struct.pack_into("<I", data, 0x208 + i * 4, 41 + (i % 4))
+        record_size = parameter_count * 4
+        struct.pack_into("<I", data, 0x12C, data_block_offset)
+        struct.pack_into("<I", data, 0x134, record_size)
+        struct.pack_into(
+            "<IIII",
+            data,
+            data_block_offset,
+            0x00040010,
+            0,
+            record_size,
+            record_size,
+        )
+        for i in range(parameter_count):
+            struct.pack_into(
+                "<I",
+                data,
+                data_block_offset + 16 + i * 4,
+                41 + (i % 4),
+            )
 
         tc_file = tmp_path / "lsx8.TC"
         tc_file.write_bytes(data)
         result = parse_tc_file(tc_file)
 
         assert result.magic == "LSX8"
-        assert len(result.parameters) == 12
+        assert len(result.parameters) == parameter_count
         assert result.record_count == 1
         assert result.records[0]["Param0"] == "0.00"
-        assert result.records[0]["Param11"] == "OFF"
+        expected_values = ["0.00", "1.00", "ON", "OFF"]
+        assert (
+            result.records[0][f"Param{parameter_count - 1}"]
+            == expected_values[(parameter_count - 1) % 4]
+        )
 
     def test_parse_nonexistent_file(self):
         """Test error when file doesn't exist."""

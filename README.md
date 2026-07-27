@@ -135,7 +135,7 @@ The ThinkCar `.TC` format is a binary format with the following characteristics:
 - **String table architecture**: All values stored as string references
 - **1-based indexing**: String indices start at 1 (not 0)
 - **Variable record width**: The descriptor defines the data-block offset and
-  record size (observed: 12 or 32 parameters)
+  record size (observed: 2, 3, 12 or 32 parameters)
 - **Little-endian encoding**: All multi-byte integers are little-endian
 
 For complete format specification, see [`docs/TC-FILE-FORMAT.md`](docs/TC-FILE-FORMAT.md).

@@ -84,6 +84,10 @@ Offset  Size  Type      Description
 0x0134  4     uint32    Record size in bytes (128 = 32 × 4)
 ```
 
+The value at descriptor offset `+0x04` (normally file offset `0x012C`) points
+to the **data block header**, not directly to the first record. Record data
+starts 16 bytes after that referenced offset.
+
 ---
 
 ## 4. Parameter Definition Table (immediately after descriptor)
@@ -127,7 +131,8 @@ Offset  Size  Type      Description
 ## 6. Data Records (immediately after data block header)
 
 Each data record contains `record size / 4` × `uint32` values. Observed record
-sizes include 128 bytes (32 values) and 48 bytes (12 values).
+sizes include 8 bytes (2 values), 12 bytes (3 values), 48 bytes (12 values),
+and 128 bytes (32 values).
 
 Each value is a **string index** into the String Table, pointing to the actual measurement value as a string.
 
