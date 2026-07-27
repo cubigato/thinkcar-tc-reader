@@ -19,6 +19,7 @@ Export to CSV:
 
 from .exporter import export_to_csv
 from .parser import TCData, parse_tc_file
+from .unit_mapping import KNOWN_PARAMETER_UNITS
 
 __version__ = "0.1.0"
-__all__ = ["parse_tc_file", "export_to_csv", "TCData"]
+__all__ = ["parse_tc_file", "export_to_csv", "TCData", "KNOWN_PARAMETER_UNITS"]

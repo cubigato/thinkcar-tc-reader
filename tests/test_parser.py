@@ -16,6 +16,7 @@ from thinkcar_tc_reader.parser import (
     _read_uint32,
     parse_tc_file,
 )
+from thinkcar_tc_reader.unit_mapping import KNOWN_PARAMETER_UNITS
 
 
 class TestBinaryReaders:
@@ -91,6 +92,7 @@ class TestTCFileParser:
         # Data descriptor and data block pointers
         struct.pack_into("<I", data, 0x118, 0x128)
         struct.pack_into("<I", data, 0x12C, 0x338)
+        struct.pack_into("<I", data, 0x130, 512)
         struct.pack_into("<I", data, 0x134, 128)
 
         # Data block header at 0x338
@@ -101,6 +103,8 @@ class TestTCFileParser:
         for i in range(32):
             # Point to string indices 9-40
             struct.pack_into("<H", data, 0x138 + i * 4, 9 + i)
+            # Parallel unit table: indices 41 and 42.
+            struct.pack_into("<H", data, 0x1B8 + i * 4, 41 + (i % 2))
 
         # String table at 0x1000
         string_offset = 0x1000 + 16  # After 16-byte header
@@ -126,8 +130,8 @@ class TestTCFileParser:
         for i in range(32):
             strings.append(f"Param{i}")
 
-        # Add some value strings (indices 41+)
-        strings.extend(["0.00", "1.00", "ON", "OFF"])
+        # Add units (indices 41-42) and value strings (indices 43+)
+        strings.extend(["unit A", "unit B", "0.00", "1.00", "ON", "OFF"])
 
         # Write strings
         for s in strings:
@@ -140,8 +144,8 @@ class TestTCFileParser:
 
         # Add one data record at 0x348 (32 × uint32)
         for i in range(32):
-            # Point to value strings (indices 41-44 cycling)
-            struct.pack_into("<I", data, 0x348 + i * 4, 41 + (i % 4))
+            # Point to value strings (indices 43-46 cycling)
+            struct.pack_into("<I", data, 0x348 + i * 4, 43 + (i % 4))
 
         return bytes(data)
 
@@ -157,8 +161,31 @@ class TestTCFileParser:
         assert result.metadata.language == "en.English"
         assert result.metadata.manufacturer == "SUBARU"
         assert len(result.parameters) == 32
+        assert result.parameter_units[:4] == [
+            "unit A",
+            "unit B",
+            "unit A",
+            "unit B",
+        ]
+        assert result.units == ["unit A", "unit B"]
         assert result.record_count == 1
         assert len(result.records) == 1
+
+    def test_known_unit_mapping_only_fills_missing_embedded_unit(
+        self, tmp_path, monkeypatch
+    ):
+        """Known fallbacks supplement, but never replace, file-provided units."""
+        data = bytearray(self.create_minimal_tc_file())
+        struct.pack_into("<H", data, 0x1B8, 0)  # Param0 has no embedded unit.
+        monkeypatch.setitem(KNOWN_PARAMETER_UNITS, "Param0", ("fallback",))
+        monkeypatch.setitem(KNOWN_PARAMETER_UNITS, "Param1", ("replacement",))
+
+        tc_file = tmp_path / "unit_fallback.TC"
+        tc_file.write_bytes(data)
+        result = parse_tc_file(tc_file)
+
+        assert result.parameter_units[0] == "fallback"
+        assert result.parameter_units[1] == "unit B"
 
     @pytest.mark.parametrize(
         ("parameter_count", "data_block_offset"),
@@ -173,7 +200,16 @@ class TestTCFileParser:
 
         record_size = parameter_count * 4
         struct.pack_into("<I", data, 0x12C, data_block_offset)
+        struct.pack_into("<I", data, 0x130, record_size * 4)
         struct.pack_into("<I", data, 0x134, record_size)
+        unit_table_offset = 0x138 + record_size
+        for i in range(parameter_count):
+            struct.pack_into(
+                "<H",
+                data,
+                unit_table_offset + i * 4,
+                41 + (i % 2),
+            )
         struct.pack_into(
             "<IIII",
             data,
@@ -188,7 +224,7 @@ class TestTCFileParser:
                 "<I",
                 data,
                 data_block_offset + 16 + i * 4,
-                41 + (i % 4),
+                43 + (i % 4),
             )
 
         tc_file = tmp_path / "lsx8.TC"
@@ -197,6 +233,10 @@ class TestTCFileParser:
 
         assert result.magic == "LSX8"
         assert len(result.parameters) == parameter_count
+        assert result.parameter_units == [
+            "unit A" if i % 2 == 0 else "unit B"
+            for i in range(parameter_count)
+        ]
         assert result.record_count == 1
         assert result.records[0]["Param0"] == "0.00"
         expected_values = ["0.00", "1.00", "ON", "OFF"]
@@ -282,3 +322,50 @@ class TestTCData:
 
         missing = data.get_parameter_values("NonExistent")
         assert missing == ["", ""]
+
+    def test_set_parameter_unit_by_column(self):
+        """Unit overrides are positional and refresh the unique unit list."""
+        data = TCData(
+            magic="LSX9",
+            metadata=TCMetadata("", "", "", "", "", "", "", ""),
+            parameters=["Speed", "Speed", "Temperature"],
+            units=["km/h", "rpm", "degree C"],
+            records=[],
+            record_count=0,
+            string_count=0,
+            parameter_units=["km/h", "rpm", "degree C"],
+        )
+
+        data.set_parameter_unit(1, " mph ")
+
+        assert data.parameter_units == ["km/h", "mph", "degree C"]
+        assert data.units == ["km/h", "mph", "degree C"]
+
+    def test_set_parameter_unit_rejects_invalid_column(self):
+        data = TCData(
+            magic="LSX9",
+            metadata=TCMetadata("", "", "", "", "", "", "", ""),
+            parameters=["Speed"],
+            units=[],
+            records=[],
+            record_count=0,
+            string_count=0,
+        )
+
+        with pytest.raises(IndexError, match="out of range"):
+            data.set_parameter_unit(1, "km/h")
+
+    def test_parameter_units_initialize_unique_units(self):
+        data = TCData(
+            magic="LSX9",
+            metadata=TCMetadata("", "", "", "", "", "", "", ""),
+            parameters=["Speed", "Temperature", "Voltage"],
+            units=[],
+            records=[],
+            record_count=0,
+            string_count=0,
+            parameter_units=[" km/h ", "degree C", "km/h"],
+        )
+
+        assert data.parameter_units == ["km/h", "degree C", "km/h"]
+        assert data.units == ["km/h", "degree C"]

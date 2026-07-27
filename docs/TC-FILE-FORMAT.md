@@ -90,9 +90,17 @@ starts 16 bytes after that referenced offset.
 
 ---
 
-## 4. Parameter Definition Table (immediately after descriptor)
+## 4. Parameter Definition Tables (immediately after descriptor)
 
-One entry per 4-byte value in a record (record size / 4), each 4 bytes:
+The parameter section contains four parallel tables. Each table is one record
+wide and contains one 4-byte entry per parameter:
+
+| Relative offset | Observed purpose |
+|-----------------|------------------|
+| `descriptor + 16` | Parameter-name string indices |
+| `descriptor + 16 + record_size` | Parameter-unit string indices |
+| `descriptor + 16 + 2 × record_size` | Unknown (all zero in samples) |
+| `descriptor + 16 + 3 × record_size` | Unknown (all zero in samples) |
 
 ```
 Offset  Size  Type      Description
@@ -100,6 +108,10 @@ Offset  Size  Type      Description
 +0x00   2     uint16    Parameter name string index
 +0x02   2     uint16    Same as name index (redundant/unused?)
 ```
+
+The same duplicated-index entry format is used by the unit table. A unit index
+of zero means that no unit is assigned. Some devices instead reference a
+whitespace-only string, which should also be treated as no unit.
 
 **Note:** Parameter indices reference the String Table. For this sample file:
 - Index 9 → "Accel. Opening Angle"
@@ -332,8 +344,16 @@ def parse_tc_file(data):
     for i in range(parameter_count):
         name_idx = read_uint16(data, parameter_table_offset + i*4)
         params.append(strings[name_idx])  # Direct index (1-based)
+
+    # 6. Parse the parallel parameter-unit table
+    parameter_units = []
+    unit_table_offset = parameter_table_offset + record_size
+    for i in range(parameter_count):
+        unit_idx = read_uint16(data, unit_table_offset + i*4)
+        unit = strings[unit_idx].strip() if unit_idx else ''
+        parameter_units.append(unit)
     
-    # 6. Parse data records
+    # 7. Parse data records
     records = []
     for r in range(record_count):
         offset = data_offset + r * record_size
@@ -346,7 +366,8 @@ def parse_tc_file(data):
     return {
         'metadata': strings[1:9],      # Indices 1-8
         'parameters': params,           # From definition table
-        'units': strings[40:47],        # Indices 40-46
+        'parameter_units': parameter_units,
+        'units': list(dict.fromkeys(u for u in parameter_units if u)),
         'records': records
     }
 
@@ -372,9 +393,9 @@ def parse_string_table(data, pos):
 
 1. **No official documentation** - Format derived from reverse engineering
 2. **Version variations** - Different ThinkCar app versions may use slightly different formats
-3. **Parameter-value mapping** - The exact column-to-parameter mapping needs verification
-4. **Timestamp per record** - No visible per-record timestamp; timing inferred from record count and session duration
-5. **Unit assignment** - No explicit unit-to-parameter mapping found; must be inferred from parameter names
+3. **Timestamp per record** - No visible per-record timestamp; timing inferred from record count and session duration
+4. **Remaining parameter tables** - The third and fourth parallel tables are
+   all zero in known samples, so their purpose is unknown
 
 ---
 

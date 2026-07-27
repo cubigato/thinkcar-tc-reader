@@ -65,6 +65,10 @@ The core parsing engine that reads binary TC files according to the specificatio
 - `_parse_string_table()`: Parses length-prefixed null-terminated strings
 - `_read_uint16()`, `_read_uint32()`: Binary reading helpers
 
+Known unit associations are maintained in `unit_mapping.py`. They are applied
+only when the unit table contains no unit for a parameter; file-provided units
+always take precedence.
+
 **Implementation Details:**
 - Verifies LSX8 or LSX9 magic signature
 - Reads string table offset from header (0x0C)
@@ -79,6 +83,7 @@ CSV export functionality with metadata preservation and duplicate column handlin
 **Key Features:**
 - CSV export with proper UTF-8 encoding
 - Metadata written as CSV comments
+- Positional unit row below the parameter headers
 - Automatic handling of duplicate column names
 - Missing value handling (empty strings)
 - Configurable metadata inclusion
@@ -103,6 +108,7 @@ Command-line interface for the `tc2csv` tool.
 - `input`: Input TC file (required)
 - `-o, --output`: Output CSV file (optional, defaults to input name with .csv)
 - `--no-metadata`: Exclude metadata comments from CSV
+- `--no-units`: Exclude the positional parameter-unit row from CSV
 - `-v, --verbose`: Print detailed conversion information
 - `--version`: Show version information
 
@@ -304,8 +310,7 @@ Potential improvements (not implemented):
 3. **Data visualization:** Plot parameters over time
 4. **Format variations:** Support different ThinkCar app versions
 5. **Timestamp inference:** Calculate approximate record timestamps
-6. **Unit mapping:** Explicit parameter-to-unit associations
-7. **Binary wheels:** Pre-compiled packages for faster installation
+6. **Binary wheels:** Pre-compiled packages for faster installation
 
 ## Compliance
 

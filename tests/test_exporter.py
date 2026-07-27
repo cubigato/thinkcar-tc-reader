@@ -116,6 +116,7 @@ class TestExportToCSV:
             records=records,
             record_count=3,
             string_count=20,
+            parameter_units=["km/h", "degree C", "V"],
         )
 
     def test_export_basic(self, tmp_path):
@@ -134,11 +135,12 @@ class TestExportToCSV:
 
         # Check header
         assert rows[0] == ["Record", "Speed", "Temp", "Voltage"]
+        assert rows[1] == ["Unit", "km/h", "degree C", "V"]
 
         # Check data rows
-        assert rows[1] == ["0", "10", "20", "14.5"]
-        assert rows[2] == ["1", "15", "25", "14.6"]
-        assert rows[3] == ["2", "20", "30", "14.7"]
+        assert rows[2] == ["0", "10", "20", "14.5"]
+        assert rows[3] == ["1", "15", "25", "14.6"]
+        assert rows[4] == ["2", "20", "30", "14.7"]
 
     def test_export_with_metadata(self, tmp_path):
         """Test CSV export includes metadata comments."""
@@ -156,6 +158,25 @@ class TestExportToCSV:
 
         # Check CSV data still present
         assert "Record,Speed,Temp,Voltage" in content
+        assert "Unit,km/h,degree C,V" in content
+
+    def test_export_without_unit_row(self, tmp_path):
+        """The unit row can be disabled for backwards-compatible CSV output."""
+        data = self.create_test_data()
+        csv_file = tmp_path / "output.csv"
+
+        export_to_csv(
+            data,
+            csv_file,
+            include_metadata=False,
+            include_units=False,
+        )
+
+        with open(csv_file, "r") as f:
+            rows = list(csv.reader(f))
+
+        assert rows[0] == ["Record", "Speed", "Temp", "Voltage"]
+        assert rows[1] == ["0", "10", "20", "14.5"]
 
     def test_export_with_duplicate_columns(self, tmp_path):
         """Test export handles duplicate column names."""
@@ -215,8 +236,8 @@ class TestExportToCSV:
             rows = list(reader)
 
         # Missing values should be empty strings
-        assert rows[1] == ["0", "10", "20", ""]
-        assert rows[2] == ["1", "15", "", "14.6"]
+        assert rows[2] == ["0", "10", "20", ""]
+        assert rows[3] == ["1", "15", "", "14.6"]
 
     def test_export_empty_records(self, tmp_path):
         """Test export with no records."""
@@ -239,9 +260,10 @@ class TestExportToCSV:
             reader = csv.reader(f)
             rows = list(reader)
 
-        # Only header, no data rows
-        assert len(rows) == 1
+        # Header and unit row, no data rows
+        assert len(rows) == 2
         assert rows[0] == ["Record", "Speed", "Temp"]
+        assert rows[1] == ["Unit", "", ""]
 
     def test_export_path_as_string(self, tmp_path):
         """Test export accepts string path."""

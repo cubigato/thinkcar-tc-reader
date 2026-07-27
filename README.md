@@ -75,6 +75,22 @@ Exclude metadata comments from CSV:
 tc2csv recording.TC --no-metadata
 ```
 
+By default, the CSV contains a positional unit row directly below the column
+headers:
+
+```csv
+Record,Accelerator Pedal Position,Comp Power Supply Voltage,Engine Speed
+Unit,%,V,rpm
+0,0.00,14.34,873.00
+```
+
+Exclude this row for compatibility with consumers that expect exactly one
+header row:
+
+```bash
+tc2csv recording.TC --no-units
+```
+
 ### Python API
 
 #### Parse a TC file
@@ -92,12 +108,92 @@ print(f"Device ID: {data.metadata.device_id}")
 
 # Access parameters
 print(f"Parameters: {data.parameters}")
+print(f"Parameter units: {data.parameter_units}")
 print(f"Record count: {data.record_count}")
 
 # Access records
 for i, record in enumerate(data.records[:5]):
     print(f"Record {i}: {record}")
 ```
+
+#### Read and adjust parameter units
+
+`parameters` and `parameter_units` are positional lists of the same length.
+The unit at a given column therefore belongs to the parameter at that column:
+
+```python
+for column, (parameter, unit) in enumerate(
+    zip(data.parameters, data.parameter_units, strict=True)
+):
+    print(column, parameter, unit or "(no unit)")
+```
+
+The association is read directly from the parallel unit-index table in the TC
+file. A zero index or a whitespace-only unit becomes an empty string. `units`
+contains the unique non-empty units in their first-seen order.
+
+If an embedded unit is empty, the parser consults
+`KNOWN_PARAMETER_UNITS`. Embedded units always take precedence. The central
+mapping contains all non-empty associations observed in the current Subaru,
+Toyota, Nissan, and EOBD/OBD-II samples.
+
+The known fallback associations are:
+
+| Unit | Parameters |
+|------|------------|
+| `%` | Accel. Opening Angle; Accelerator Pedal Position; Lock Up Duty Ratio; Primary DOWN Duty; Primary UP Duty; Transfer Duty Ratio |
+| `mA` | Actual Forward && Reverse Linear Solenoid Current; Commanded Forward && Reverse Linear Solenoid Current; Secondary Actual Current; Secondary Set Current |
+| `MPa` | Actual Secondary Pressure |
+| `degree C` | Air Temperature At The Air Flow Sensor; ATF Temp.; Engine Coolant Temperature; Exterior Air Temperature; Temperature Of The Fuel; Temperature Upstream Of The Turbine; Turbocharging Inlet Air Temperature |
+| `V` | Air Mixer Position Sensor Voltage; Comp Power Supply Voltage; Control module voltage; EGR Valve Position Signal Voltage; Oxygen Sensor Output Voltage B1S1; Oxygen Sensor Output Voltage B1S2; Voltage Of The Turbocharger Position Signal |
+| `rpm` | Engine RPM; Engine Speed; Primary Rev Speed; Secondary Rev Speed; Turbine Revolution Speed |
+| `km/h`, `rpm` | First and second occurrence of Front Wheel Speed |
+
+If a device omits a unit or an application needs a different display notation,
+override it by column:
+
+```python
+# Use the column index because TC files may contain duplicate parameter names.
+data.set_parameter_unit(4, "°C")
+data.set_parameter_unit(6, "km/h")
+
+assert data.parameter_units[4] == "°C"
+print(data.units)  # Automatically refreshed after an override
+```
+
+To maintain an application-specific mapping, apply overrides after parsing:
+
+```python
+unit_overrides = {
+    "Engine Coolant Temperature": "°C",
+    "Vehicle Speed": "km/h",
+}
+
+for column, parameter in enumerate(data.parameters):
+    if parameter in unit_overrides:
+        data.set_parameter_unit(column, unit_overrides[parameter])
+```
+
+Name-based overrides affect every matching column. Use explicit column indices
+when duplicate names require different units.
+
+To extend the parser-wide fallback mapping for another device, register the
+exact parameter name before parsing:
+
+```python
+from thinkcar_tc_reader import KNOWN_PARAMETER_UNITS, parse_tc_file
+
+KNOWN_PARAMETER_UNITS["Boost Pressure"] = ("kPa",)
+
+# Multiple entries describe duplicate columns in occurrence order.
+KNOWN_PARAMETER_UNITS["Wheel Speed"] = ("km/h", "rpm")
+
+data = parse_tc_file("recording.TC")
+```
+
+Fallbacks only fill empty unit fields; they never replace a unit encoded in the
+TC file. Application-only display changes should continue to use
+`data.set_parameter_unit()`.
 
 #### Export to CSV
 
@@ -110,6 +206,9 @@ export_to_csv(data, "output.csv")
 
 # Export without metadata comments
 export_to_csv(data, "output.csv", include_metadata=False)
+
+# Export without the positional unit row
+export_to_csv(data, "output.csv", include_units=False)
 ```
 
 #### Extract specific parameter values
@@ -188,7 +287,8 @@ thinkcar-tc-reader/
 1. **Reverse-engineered format**: The TC format has been reverse-engineered and may contain errors or omissions
 2. **Version variations**: Different ThinkCar app versions may use slightly different formats
 3. **No timestamp per record**: Individual record timestamps are not stored in the format
-4. **Parameter-unit mapping**: Units must be inferred from parameter names as there's no explicit mapping
+4. **Incomplete metadata**: A parameter can explicitly have no unit, and the
+   purpose of the two remaining parallel parameter tables is still unknown
 
 ## Example Data
 

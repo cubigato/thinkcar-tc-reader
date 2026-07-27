@@ -12,9 +12,10 @@ The TC format uses:
 """
 
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+
+from .unit_mapping import apply_known_unit_fallbacks
 
 
 @dataclass
@@ -42,10 +43,39 @@ class TCData:
     records: list[dict[str, str]]
     record_count: int
     string_count: int
+    parameter_units: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        """Normalize the positional parameter-to-unit mapping."""
+        has_parameter_unit_mapping = bool(self.parameter_units)
+        if not has_parameter_unit_mapping:
+            self.parameter_units = [""] * len(self.parameters)
+        elif len(self.parameter_units) != len(self.parameters):
+            raise ValueError(
+                "parameter_units must contain one entry for every parameter"
+            )
+        else:
+            self.parameter_units = [unit.strip() for unit in self.parameter_units]
+
+        if has_parameter_unit_mapping:
+            self.units = list(dict.fromkeys(u for u in self.parameter_units if u))
 
     def get_parameter_values(self, param_name: str) -> list[str]:
         """Get all values for a specific parameter across all records."""
         return [record.get(param_name, "") for record in self.records]
+
+    def set_parameter_unit(self, column: int, unit: str) -> None:
+        """
+        Override the unit for one parameter column.
+
+        Columns are used instead of names because TC files may contain duplicate
+        parameter names. The unique ``units`` inventory is refreshed automatically.
+        """
+        if column < 0 or column >= len(self.parameters):
+            raise IndexError(f"Parameter column out of range: {column}")
+
+        self.parameter_units[column] = unit.strip()
+        self.units = list(dict.fromkeys(u for u in self.parameter_units if u))
 
 
 class TCParseError(Exception):
@@ -126,6 +156,7 @@ def parse_tc_file(filepath: str | Path) -> TCData:
     - Verifies LSX8/LSX9 magic signature
     - Parses string table (1-based indexing)
     - Extracts parameter definitions
+    - Maps every parameter to its unit
     - Parses data records
 
     Args:
@@ -207,6 +238,7 @@ def parse_tc_file(filepath: str | Path) -> TCData:
 
     try:
         data_block_offset = _read_uint32(data, data_descriptor_offset + 4)
+        parameter_section_size = _read_uint32(data, data_descriptor_offset + 8)
         descriptor_record_size = _read_uint32(data, data_descriptor_offset + 12)
     except TCParseError as e:
         raise TCParseError(f"Cannot read data descriptor: {e}")
@@ -242,7 +274,15 @@ def parse_tc_file(filepath: str | Path) -> TCData:
     parameter_count = record_size // 4
     parameter_table_offset = data_descriptor_offset + 16
 
-    if parameter_table_offset + parameter_count * 4 > data_block_offset:
+    if parameter_section_size and (
+        parameter_table_offset + parameter_section_size > data_block_offset
+    ):
+        raise TCParseError(
+            "Parameter section overlaps the data block "
+            f"({parameter_section_size} bytes)"
+        )
+
+    if parameter_table_offset + record_size > data_block_offset:
         raise TCParseError(
             "Parameter definition table overlaps the data block "
             f"({parameter_count} entries)"
@@ -269,6 +309,28 @@ def parse_tc_file(filepath: str | Path) -> TCData:
             # Invalid index - use placeholder
             parameters.append(f"<index_{idx}>")
 
+    # Unit definitions form a parallel table one record-width after the names.
+    # Each entry is another 1-based string-table index; zero means no unit.
+    parameter_units = [""] * parameter_count
+    unit_table_offset = parameter_table_offset + record_size
+    has_unit_table = (
+        parameter_section_size >= record_size * 2
+        and unit_table_offset + record_size <= data_block_offset
+    )
+    if has_unit_table:
+        for i in range(parameter_count):
+            unit_idx = _read_uint16(data, unit_table_offset + i * 4)
+            if unit_idx == 0:
+                continue
+            if unit_idx < len(strings):
+                # Some devices encode a missing display unit as whitespace.
+                parameter_units[i] = strings[unit_idx].strip()
+            else:
+                parameter_units[i] = f"<index_{unit_idx}>"
+
+    parameter_units = apply_known_unit_fallbacks(parameters, parameter_units)
+    units = list(dict.fromkeys(unit for unit in parameter_units if unit))
+
     # 7. Validate and locate the records immediately after the block header.
     data_offset = data_block_offset + 16
     record_count = data_size // record_size
@@ -284,7 +346,6 @@ def parse_tc_file(filepath: str | Path) -> TCData:
 
     # 8. Parse data records. Each uint32 is a string-table index.
     records = []
-    value_indices: list[int] = []
 
     for rec_num in range(record_count):
         offset = data_offset + rec_num * record_size
@@ -301,7 +362,6 @@ def parse_tc_file(filepath: str | Path) -> TCData:
         record = {}
         for i, param_name in enumerate(parameters):
             value_idx = values[i]
-            value_indices.append(value_idx)
 
             # Look up string value (indices are 1-based)
             if value_idx < len(strings):
@@ -314,15 +374,6 @@ def parse_tc_file(filepath: str | Path) -> TCData:
 
         records.append(record)
 
-    # Unit strings sit between the parameter names and the first measurement
-    # value. Their absolute indices vary with the number of parameters.
-    first_unit_index = max(param_indices, default=0) + 1
-    first_value_index = min(
-        (idx for idx in value_indices if idx > 0),
-        default=first_unit_index,
-    )
-    units = strings[first_unit_index:first_value_index]
-
     return TCData(
         magic=magic,
         metadata=metadata,
@@ -331,4 +382,5 @@ def parse_tc_file(filepath: str | Path) -> TCData:
         records=records,
         record_count=len(records),
         string_count=len(strings) - 1,  # Exclude placeholder at index 0
+        parameter_units=parameter_units,
     )

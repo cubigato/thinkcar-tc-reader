@@ -13,7 +13,10 @@ from .parser import TCData
 
 
 def export_to_csv(
-    data: TCData, output_path: str | Path, include_metadata: bool = True
+    data: TCData,
+    output_path: str | Path,
+    include_metadata: bool = True,
+    include_units: bool = True,
 ) -> None:
     """
     Export parsed TC data to CSV format.
@@ -21,12 +24,14 @@ def export_to_csv(
     The CSV file will have:
     - Optional metadata header (as comments)
     - Column headers with parameter names (duplicates are numbered)
+    - Optional positional unit row
     - One row per record with all parameter values
 
     Args:
         data: Parsed TCData object
         output_path: Path to output CSV file
         include_metadata: If True, include metadata as comment lines at top
+        include_units: If True, write a unit row below the column headers
 
     Raises:
         IOError: If writing to the file fails
@@ -46,6 +51,9 @@ def export_to_csv(
 
         # Header row: Record number + parameter names
         writer.writerow(["Record"] + headers)
+
+        if include_units:
+            writer.writerow(["Unit"] + data.parameter_units)
 
         # Data rows
         for i, record in enumerate(data.records):

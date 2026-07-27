@@ -41,6 +41,12 @@ def main() -> int:
     )
 
     parser.add_argument(
+        "--no-units",
+        action="store_true",
+        help="Do not include the parameter unit row in CSV output",
+    )
+
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -90,6 +96,7 @@ def main() -> int:
             print(f"  Parameters: {len(data.parameters)}")
             print(f"  Records: {data.record_count}")
             print(f"  Strings: {data.string_count}")
+            print(f"  Units: {', '.join(data.units) or '(none)'}")
 
         # Export to CSV
         if args.verbose:
@@ -99,6 +106,7 @@ def main() -> int:
             data,
             output_path,
             include_metadata=not args.no_metadata,
+            include_units=not args.no_units,
         )
 
         print(f"Successfully converted {data.record_count} records to {output_path}")

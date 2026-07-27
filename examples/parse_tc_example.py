@@ -72,6 +72,7 @@ def parse_tc_file(filepath: str) -> dict:
         - magic: File magic string
         - metadata: Dict with language, timestamp, region, etc.
         - parameters: List of parameter names
+        - parameter_units: Positional unit for every parameter
         - units: List of unit strings
         - records: List of dicts, each containing parameter values
     """
@@ -122,9 +123,17 @@ def parse_tc_file(filepath: str) -> dict:
         strings[idx] if idx < len(strings) else f"<{idx}>" for idx in param_indices
     ]
 
+    # Units form a parallel table one record-width after the parameter names.
+    parameter_units = []
+    unit_table_offset = parameter_table_offset + record_size
+    for i in range(parameter_count):
+        idx = read_uint16(data, unit_table_offset + i * 4)
+        unit = strings[idx].strip() if 0 < idx < len(strings) else ""
+        parameter_units.append(unit)
+    units = list(dict.fromkeys(unit for unit in parameter_units if unit))
+
     # Parse data records
     records = []
-    value_indices = []
     for rec_num in range(record_count):
         offset = data_offset + rec_num * record_size
         values = struct.unpack(
@@ -136,23 +145,16 @@ def parse_tc_file(filepath: str) -> dict:
         record = {}
         for i, param_name in enumerate(parameters):
             value_idx = values[i]
-            value_indices.append(value_idx)
             value = strings[value_idx] if value_idx < len(strings) else f"<{value_idx}>"
             record[param_name] = value
 
         records.append(record)
 
-    first_unit_index = max(param_indices, default=0) + 1
-    first_value_index = min(
-        (idx for idx in value_indices if idx > 0),
-        default=first_unit_index,
-    )
-    units = strings[first_unit_index:first_value_index]
-
     return {
         "magic": magic,
         "metadata": metadata,
         "parameters": parameters,
+        "parameter_units": parameter_units,
         "units": units,
         "records": records,
         "record_count": record_count,
@@ -180,6 +182,7 @@ def export_to_csv(parsed_data: dict, output_path: str):
 
         # Header row with unique column names
         writer.writerow(["Record"] + headers)
+        writer.writerow(["Unit"] + parsed_data["parameter_units"])
 
         # Data rows
         for i, record in enumerate(parsed_data["records"]):
@@ -223,8 +226,11 @@ def main():
     print(f"\nUnits found: {parsed['units']}")
 
     print(f"\nParameters:")
-    for i, param in enumerate(parsed["parameters"]):
-        print(f"  [{i:2d}] {param}")
+    for i, (param, unit) in enumerate(
+        zip(parsed["parameters"], parsed["parameter_units"], strict=True)
+    ):
+        suffix = f" [{unit}]" if unit else ""
+        print(f"  [{i:2d}] {param}{suffix}")
 
     print(f"\nSample Data (first 5 records):")
     print("-" * 60)

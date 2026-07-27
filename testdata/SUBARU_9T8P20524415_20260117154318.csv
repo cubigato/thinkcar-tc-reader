@@ -19,6 +19,7 @@
 # Units: %, mA, MPa, degree C, V, rpm, km/h
 #
 Record,Accel. Opening Angle,Actual Forward && Reverse Linear Solenoid Current,Actual Gear Ratio,Actual Secondary Pressure,AT learning,ATF Temp.,ATF Temperature Lamp,Commanded Forward && Reverse Linear Solenoid Current,Control module voltage,D Range Signal,Diagnosis Lamp,Down Switch,Engine Speed,Front Wheel Speed,Front Wheel Speed (2),Lock Up Duty Ratio,Lock-Up ON/OFF Solenoid,Manual Mode Switch,N Range,P Range,Primary DOWN Duty,Primary Rev Speed,Primary UP Duty,R Range Signal,Secondary Actual Current,Secondary Rev Speed,Secondary Set Current,Shift step in Manu. Mode,Stop Light Switch,Transfer Duty Ratio,Turbine Revolution Speed,Up Switch
+Unit,%,mA,,MPa,,degree C,,mA,V,,,,rpm,km/h,rpm,%,,,,,%,rpm,%,,mA,rpm,mA,,,%,rpm,
 0,0.00,1001.00,2.16,0.60,Completed,9.00,OFF,1000.00,14.64,OFF,OFF,OFF,976.00,0.00,0.00,0.00,OFF,OFF,OFF,ON,34.80,821.00,0.00,OFF,768.00,386.00,767.00,0.00,OFF,0.00,928.00,OFF
 1,0.00,1000.00,2.16,0.59,Completed,9.00,OFF,1000.00,14.66,OFF,OFF,OFF,969.00,0.00,0.00,0.00,OFF,OFF,OFF,ON,34.40,830.00,0.00,OFF,767.00,385.00,766.00,0.00,OFF,0.00,928.00,OFF
 2,0.00,1000.00,2.16,0.60,Completed,9.00,OFF,1000.00,14.66,OFF,OFF,OFF,976.00,0.00,0.00,0.00,OFF,OFF,OFF,ON,0.00,825.00,34.80,OFF,768.00,384.00,766.00,0.00,OFF,0.00,928.00,OFF
