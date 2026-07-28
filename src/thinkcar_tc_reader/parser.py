@@ -103,8 +103,11 @@ def _parse_string_table(data: bytes, start_pos: int) -> list[str]:
     Parse the string table from the TC file.
 
     Format: Each string is stored as:
-        - 2-byte length (uint16 LE) including null terminator
-        - string data (null-terminated UTF-8)
+        - 2-byte total entry size (uint16 LE)
+        - string data (UTF-8)
+        - null terminator
+
+    The entry size includes the 2-byte size field, string bytes, and terminator.
 
     Returns a list with index 0 as empty placeholder (for 1-based indexing).
 
@@ -118,32 +121,32 @@ def _parse_string_table(data: bytes, start_pos: int) -> list[str]:
     strings = [""]  # Placeholder at index 0 for 1-based indexing
     pos = start_pos
 
-    while pos < len(data) - 2:
+    while pos + 2 <= len(data):
         length = _read_uint16(data, pos)
 
         # Stop conditions
         if length == 0 or length > 500:
             break
+        if length < 3:
+            break
 
-        pos += 2
-        start = pos
+        entry_end = pos + length
+        if entry_end > len(data):
+            break
 
-        # Find null terminator
-        while pos < len(data) and data[pos] != 0:
-            pos += 1
-
-        if pos >= len(data):
+        payload = data[pos + 2 : entry_end]
+        if not payload or payload[-1] != 0:
             break
 
         # Decode string
         try:
-            s = data[start:pos].decode("utf-8")
+            s = payload[:-1].decode("utf-8")
         except UnicodeDecodeError:
             # Fallback to latin-1 for non-UTF8 strings
-            s = data[start:pos].decode("latin-1", errors="replace")
+            s = payload[:-1].decode("latin-1", errors="replace")
 
         strings.append(s)
-        pos += 1  # Skip null terminator
+        pos = entry_end
 
     return strings
 

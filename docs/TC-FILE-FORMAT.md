@@ -220,9 +220,13 @@ Offset  Size  Type      Description
 ### String Entry Format
 Each string is stored as:
 ```
-+0x00   2     uint16    Entry length (string + null terminator)
-+0x02   N     char[N]   String data (null-terminated)
++0x00   2     uint16    Total entry size (including this field)
++0x02   L-2   char[]    String data followed by null terminator
 ```
+
+`L` is the total entry size, including the 2-byte length field and the null
+terminator. For example, the `%` entry is `04 00 25 00`: total size 4, followed
+immediately by the next entry.
 
 ### String Table Organization
 
@@ -374,16 +378,15 @@ def parse_tc_file(data):
 def parse_string_table(data, pos):
     """Parse length-prefixed null-terminated strings."""
     strings = []
-    while pos < len(data):
+    while pos + 2 <= len(data):
         length = read_uint16(data, pos)
-        if length == 0 or length > 500:
+        if length == 0 or length < 3 or length > 500:
             break
-        pos += 2
-        start = pos
-        while pos < len(data) and data[pos] != 0:
-            pos += 1
-        strings.append(data[start:pos].decode('utf-8'))
-        pos += 1  # Skip null terminator
+        entry_end = pos + length
+        if entry_end > len(data) or data[entry_end - 1] != 0:
+            break
+        strings.append(data[pos + 2:entry_end - 1].decode('utf-8'))
+        pos = entry_end
     return strings
 ```
 

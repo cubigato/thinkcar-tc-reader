@@ -50,8 +50,8 @@ class TestStringTableParser:
         assert strings == [""]  # Only placeholder
 
     def test_parse_single_string(self):
-        # Length=6 (includes null), "Hello\0"
-        data = b"\x06\x00Hello\x00"
+        # Entry size=8: 2-byte size + "Hello" + null terminator
+        data = b"\x08\x00Hello\x00"
         strings = _parse_string_table(data, 0)
         assert len(strings) == 2
         assert strings[0] == ""  # Placeholder
@@ -59,21 +59,29 @@ class TestStringTableParser:
 
     def test_parse_multiple_strings(self):
         # "Foo\0" + "Bar\0"
-        data = b"\x04\x00Foo\x00\x04\x00Bar\x00"
+        data = b"\x06\x00Foo\x00\x06\x00Bar\x00"
         strings = _parse_string_table(data, 0)
         assert len(strings) == 3
         assert strings[1] == "Foo"
         assert strings[2] == "Bar"
 
     def test_parse_string_with_utf8(self):
-        data = b"\x07\x00\xc3\xa4\xc3\xb6\xc3\xbc\x00"  # "äöü\0"
+        data = b"\x09\x00\xc3\xa4\xc3\xb6\xc3\xbc\x00"  # "äöü\0"
         strings = _parse_string_table(data, 0)
         assert strings[1] == "äöü"
 
     def test_parse_string_stops_on_zero_length(self):
-        data = b"\x04\x00Foo\x00\x00\x00\x04\x00Bar\x00"
+        data = b"\x06\x00Foo\x00\x00\x00\x06\x00Bar\x00"
         strings = _parse_string_table(data, 0)
         assert len(strings) == 2  # Placeholder + "Foo", stops at zero length
+
+    def test_parse_string_stops_on_entry_without_null_terminator(self):
+        data = b"\x05\x00Foo"
+        assert _parse_string_table(data, 0) == [""]
+
+    def test_parse_string_stops_when_entry_exceeds_data(self):
+        data = b"\x08\x00Foo\x00"
+        assert _parse_string_table(data, 0) == [""]
 
 
 class TestTCFileParser:
@@ -136,11 +144,11 @@ class TestTCFileParser:
         # Write strings
         for s in strings:
             s_bytes = s.encode("utf-8") + b"\x00"
-            length = len(s_bytes)
-            struct.pack_into("<H", data, string_offset, length)
+            entry_size = len(s_bytes) + 2
+            struct.pack_into("<H", data, string_offset, entry_size)
             string_offset += 2
-            data[string_offset : string_offset + length] = s_bytes
-            string_offset += length
+            data[string_offset : string_offset + len(s_bytes)] = s_bytes
+            string_offset += len(s_bytes)
 
         # Add one data record at 0x348 (32 × uint32)
         for i in range(32):
